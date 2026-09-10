@@ -576,9 +576,12 @@ export default function App() {
           color: var(--text-soft);
           background: var(--night-bottom);
           min-height: 100vh;
+          min-height: 100dvh;
           width: 100%;
           box-sizing: border-box;
           padding: clamp(10px, 2.5vw, 22px);
+          padding-top: calc(clamp(10px, 2.5vw, 22px) + env(safe-area-inset-top));
+          padding-bottom: calc(clamp(10px, 2.5vw, 22px) + env(safe-area-inset-bottom));
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -693,8 +696,8 @@ export default function App() {
         .fd-empty { color: #b9aecb; font-size: 13px; text-align: center; padding: 18px 0; }
 
         /* ---- game screen: true fullscreen ---- */
-        .fd-game-wrap { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 5; display: flex; flex-direction: column; }
-        .fd-hud { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; pointer-events: none; }
+        .fd-game-wrap { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 5; display: flex; flex-direction: column; }
+        .fd-hud { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; padding-top: calc(18px + env(safe-area-inset-top)); padding-left: calc(22px + env(safe-area-inset-left)); padding-right: calc(22px + env(safe-area-inset-right)); pointer-events: none; }
         .fd-hud > * { pointer-events: auto; }
         .fd-hud-pill { display: flex; align-items: center; gap: 7px; background: rgba(8,5,16,0.55); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 7px 14px; font-size: 14px; font-weight: 800; color: var(--gold); backdrop-filter: blur(4px); }
         .fd-hud-streak { color: var(--teal); font-size: 12.5px; font-weight: 700; }
