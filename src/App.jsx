@@ -42,6 +42,54 @@ const SAMPLE_DECK = [
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
+
+  // ---------- "Add to Home Screen" install prompt ----------
+  const [installPromptEvent, setInstallPromptEvent] = useState(null); // Android/Chromium: captured beforeinstallprompt
+  const [isStandalone, setIsStandalone] = useState(false); // already running as an installed app
+  const [showIOSInstall, setShowIOSInstall] = useState(false); // iOS has no programmatic prompt - show manual steps
+  const [showInstallUnsupported, setShowInstallUnsupported] = useState(false); // desktop/other browsers
+
+  useEffect(() => {
+    const standalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      window.navigator.standalone === true;
+    setIsStandalone(standalone);
+
+    const onBeforeInstall = (e) => {
+      e.preventDefault();
+      setInstallPromptEvent(e);
+    };
+    const onInstalled = () => {
+      setIsStandalone(true);
+      setInstallPromptEvent(null);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  async function handleInstallClick() {
+    if (installPromptEvent) {
+      // Android / Chromium: this shows the real native "Install app?" system dialog
+      installPromptEvent.prompt();
+      try {
+        await installPromptEvent.userChoice;
+      } catch (e) {}
+      setInstallPromptEvent(null);
+      return;
+    }
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (isIOS) {
+      // iOS Safari gives web pages no API to trigger the native dialog -
+      // the only option is to show the manual steps ourselves.
+      setShowIOSInstall(true);
+      return;
+    }
+    setShowInstallUnsupported(true);
+  }
   const [screen, setScreen] = useState("loading");
   const [deck, setDeck] = useState([]);
   const [bestScore, setBestScore] = useState(0);
@@ -835,6 +883,44 @@ export default function App() {
         @keyframes fd-word-shake { 0%,100% { transform: translate(-50%,-50%) translateX(0); } 25% { transform: translate(-50%,-50%) translateX(-6px); } 50% { transform: translate(-50%,-50%) translateX(6px); } 75% { transform: translate(-50%,-50%) translateX(-4px); } }
         @keyframes fd-burst-success { 0% { transform: translate(-50%,-50%) scale(0.6); opacity: 0; } 30% { transform: translate(-50%,-50%) scale(1.2); opacity: 1; } 100% { transform: translate(-50%,-120%) scale(0.9); opacity: 0; } }
         @keyframes fd-burst-miss { 0% { transform: translate(-50%,-50%) scale(1); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
+
+        /* ---- persistent "install app" button ---- */
+        .fd-install-fab {
+          position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom));
+          transform: translateX(-50%);
+          z-index: 50;
+          display: flex; align-items: center; gap: 8px;
+          background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%);
+          color: #241a29; font-family: 'Be Vietnam Pro', sans-serif; font-weight: 800; font-size: 12.5px;
+          border: none; border-radius: 999px; padding: 10px 16px;
+          box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.15) inset;
+          cursor: pointer; white-space: nowrap;
+          animation: fd-install-fab-in 0.4s ease both;
+        }
+        .fd-install-fab-icon { font-size: 15px; }
+        @keyframes fd-install-fab-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+        .fd-modal-overlay {
+          position: fixed; inset: 0; z-index: 100;
+          background: rgba(2,1,6,0.72); backdrop-filter: blur(3px);
+          display: flex; align-items: center; justify-content: center; padding: 20px;
+        }
+        .fd-modal {
+          position: relative; width: 100%; max-width: 380px;
+          background: linear-gradient(180deg, #1c1330 0%, #0e0a1c 100%);
+          border: 1px solid var(--border); border-radius: 16px;
+          padding: 26px 20px 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+        }
+        .fd-modal-close {
+          position: absolute; top: 10px; right: 10px; width: 28px; height: 28px;
+          border-radius: 50%; border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+          color: #cfc6dc; font-size: 16px; line-height: 1; cursor: pointer;
+        }
+        .fd-modal-title { font-family: 'Ma Shan Zheng', cursive; font-size: 22px; color: var(--gold); margin-bottom: 10px; }
+        .fd-modal-note { font-size: 13px; color: #b9aecb; line-height: 1.5; margin-bottom: 14px; }
+        .fd-modal-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
+        .fd-modal-steps li { font-size: 13.5px; line-height: 1.5; color: var(--text-soft); }
+        .fd-modal-step-icon { margin-right: 4px; }
       `}</style>
 
       <div className={`fd-bg-scene ${isMobile && screen === "playing" ? "fd-bg-scene--lite" : ""}`}>
@@ -1146,6 +1232,45 @@ export default function App() {
             {practiceMode && wrongWords.length === 0 ? "Đã hết từ sai để luyện!" : "Chơi lại"}
           </button>
           <button className="fd-btn fd-btn--ghost" onClick={() => setScreen("menu")}>Về menu</button>
+          </div>
+        </div>
+      )}
+
+      {/* persistent install button - stays on screen (no dismiss/close control) until the app is
+          actually installed. Hidden only during active gameplay so it doesn't sit on top of the
+          on-screen keyboard/typing area. */}
+      {!isStandalone && screen !== "playing" && (
+        <button className="fd-install-fab" onClick={handleInstallClick}>
+          <span className="fd-install-fab-icon">📲</span>
+          <span>Cài đặt App / Thêm ra màn hình chính</span>
+        </button>
+      )}
+
+      {showIOSInstall && (
+        <div className="fd-modal-overlay" onClick={() => setShowIOSInstall(false)}>
+          <div className="fd-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="fd-modal-close" onClick={() => setShowIOSInstall(false)}>×</button>
+            <div className="fd-modal-title">Thêm 陽俊 ra màn hình chính</div>
+            <div className="fd-modal-note">
+              Safari trên iPhone/iPad không cho phép web tự mở hộp thoại này — bạn cần làm 3 bước thủ công sau:
+            </div>
+            <ol className="fd-modal-steps">
+              <li><span className="fd-modal-step-icon">⬆️</span> Mở game bằng <b>Safari</b>, bấm nút <b>Chia sẻ</b> (hình vuông có mũi tên) ở thanh dưới trình duyệt.</li>
+              <li><span className="fd-modal-step-icon">➕</span> Trong danh sách hiện ra, chọn <b>"Thêm vào MH chính" / "Add to Home Screen"</b>.</li>
+              <li><span className="fd-modal-step-icon">✅</span> Bấm <b>"Thêm"</b> ở góc trên — icon 陽俊 sẽ xuất hiện ở màn hình chính như một app thật.</li>
+            </ol>
+          </div>
+        </div>
+      )}
+
+      {showInstallUnsupported && (
+        <div className="fd-modal-overlay" onClick={() => setShowInstallUnsupported(false)}>
+          <div className="fd-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="fd-modal-close" onClick={() => setShowInstallUnsupported(false)}>×</button>
+            <div className="fd-modal-title">Chưa thể cài trực tiếp</div>
+            <div className="fd-modal-note">
+              Trình duyệt hiện tại chưa hỗ trợ cài đặt tự động. Trên điện thoại, hãy mở link này bằng <b>Chrome (Android)</b> hoặc <b>Safari (iPhone/iPad)</b> để cài ra màn hình chính.
+            </div>
           </div>
         </div>
       )}
