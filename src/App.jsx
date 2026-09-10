@@ -90,9 +90,15 @@ export default function App() {
   const missedWordsRef = useRef([]);
   const maxStreakRef = useRef(0);
   const usedWordIdsRef = useRef(new Set());
+  const sessionDeckRef = useRef([]);
   const livesRef = useRef(3);
   const [victory, setVictory] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [wrongWords, setWrongWords] = useState([]);
+  const wrongWordsRef = useRef([]);
+  const [practiceMode, setPracticeMode] = useState(false);
+
+  useEffect(() => { wrongWordsRef.current = wrongWords; }, [wrongWords]);
 
   useEffect(() => {
     const mq = window.matchMedia("(pointer: coarse)");
@@ -126,11 +132,49 @@ export default function App() {
     []
   );
 
+  const nebulae = useMemo(
+    () => [
+      { left: "-8%", top: "5%", width: "60%", height: "55%", color: "126,74,189", dur: 24, delay: 0 },
+      { right: "-10%", top: "30%", width: "55%", height: "50%", color: "46,167,177", dur: 30, delay: 3 },
+      { left: "20%", bottom: "-10%", width: "50%", height: "40%", color: "198,80,120", dur: 27, delay: 6 },
+    ],
+    []
+  );
+
+  const planets = useMemo(
+    () => [
+      { left: "8%", top: "14%", size: 16, bg: "radial-gradient(circle at 35% 30%, #f0a86e 0%, #a85a3a 70%)", glow: "0 0 14px 3px rgba(240,168,110,0.3)", dur: 52 },
+      { left: "18%", top: "60%", size: 8, bg: "radial-gradient(circle at 35% 30%, #9fd6e0 0%, #3d7d8a 70%)", glow: "none", dur: 68 },
+    ],
+    []
+  );
+
+  const shootingStars = useMemo(
+    () =>
+      Array.from({ length: 4 }).map((_, i) => {
+        const dist = 240 + Math.random() * 160;
+        let angleDeg = 18 + Math.random() * 48; // downward-right sweep
+        if (Math.random() < 0.5) angleDeg = 180 - angleDeg; // mirror to downward-left
+        const rad = (angleDeg * Math.PI) / 180;
+        return {
+          left: 10 + Math.random() * 70,
+          top: 5 + Math.random() * 30,
+          angleDeg,
+          dx: Math.cos(rad) * dist,
+          dy: Math.sin(rad) * dist,
+          dur: 7 + i * 2.5 + Math.random() * 3,
+          delay: i * 2.2 + Math.random() * 2,
+        };
+      }),
+    []
+  );
+
   // ---------- load / save ----------
   useEffect(() => {
     let loadedDeck = [];
     let loadedBest = 0;
     let loadedMode = "hz";
+    let loadedWrong = [];
     try {
       const raw = localStorage.getItem("fd_deck");
       if (raw) loadedDeck = JSON.parse(raw);
@@ -143,10 +187,15 @@ export default function App() {
       const raw3 = localStorage.getItem("fd_display_mode");
       if (raw3) loadedMode = JSON.parse(raw3);
     } catch (e) {}
+    try {
+      const raw4 = localStorage.getItem("fd_wrong_words");
+      if (raw4) loadedWrong = JSON.parse(raw4);
+    } catch (e) {}
     if (!loadedDeck || loadedDeck.length === 0) loadedDeck = SAMPLE_DECK;
     setDeck(loadedDeck);
     setBestScore(loadedBest || 0);
     setMode(loadedMode === "vn" || loadedMode === "both" ? loadedMode : "hz");
+    setWrongWords(Array.isArray(loadedWrong) ? loadedWrong : []);
     setLoaded(true);
     setScreen("menu");
   }, []);
@@ -160,6 +209,11 @@ export default function App() {
     if (!loaded) return;
     try { localStorage.setItem("fd_display_mode", JSON.stringify(mode)); } catch (e) {}
   }, [mode, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem("fd_wrong_words", JSON.stringify(wrongWords)); } catch (e) {}
+  }, [wrongWords, loaded]);
 
   function persistBest(value) {
     try { localStorage.setItem("fd_best_score", JSON.stringify(value)); } catch (e) {}
@@ -196,8 +250,16 @@ export default function App() {
   useEffect(() => {
     if (screen !== "playing") return;
     spawnTimerRef.current = 1800;
-    const id = setInterval(tick, 50);
-    return () => clearInterval(id);
+    let rafId;
+    let last = performance.now();
+    const loop = (now) => {
+      const dtSec = Math.min((now - last) / 1000, 0.1); // clamp to avoid big jumps (tab switch, lag spike)
+      last = now;
+      tick(dtSec);
+      rafId = requestAnimationFrame(loop);
+    };
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen]);
 
@@ -218,9 +280,8 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fallingWords, screen]);
 
-  function tick() {
+  function tick(dtSec) {
     if (screenRef.current !== "playing") return;
-    const dtSec = 0.05;
     const level = scoreLevelRef.current;
     const moved = fallingWordsRef.current.map((w) => ({ ...w, y: w.y + w.speed * dtSec }));
     const remain = [];
@@ -231,7 +292,7 @@ export default function App() {
     if (missed.length) {
       missed.forEach((w) => spawnMeteor(w));
     }
-    if (remain.length === 0 && deckRef.current.length > 0 && usedWordIdsRef.current.size >= deckRef.current.length) {
+    if (remain.length === 0 && sessionDeckRef.current.length > 0 && usedWordIdsRef.current.size >= sessionDeckRef.current.length) {
       endGame();
       return;
     }
@@ -243,7 +304,7 @@ export default function App() {
   }
 
   function spawnWord(level) {
-    const deckArr = deckRef.current;
+    const deckArr = sessionDeckRef.current;
     if (!deckArr.length) return;
     if (fallingWordsRef.current.length >= 4) return;
     const available = deckArr.filter((w) => !usedWordIdsRef.current.has(w.id));
@@ -261,6 +322,7 @@ export default function App() {
     instanceCounter.current += 1;
     const newWord = {
       instId: instanceCounter.current,
+      wordId: word.id,
       hanzi: word.hanzi, pinyin: word.pinyin, meaning: word.meaning,
       x, y: -8, speed,
     };
@@ -338,7 +400,7 @@ export default function App() {
           scoreGain += gain;
           streakGain += 1;
           completedWords.push({ ...exact, gain });
-          hitWordsRef.current.push({ hanzi: exact.hanzi, pinyin: exact.pinyin, meaning: exact.meaning });
+          hitWordsRef.current.push({ wordId: exact.wordId, hanzi: exact.hanzi, pinyin: exact.pinyin, meaning: exact.meaning });
           buf = "";
           shakeTargets = [];
         }
@@ -405,7 +467,7 @@ export default function App() {
     setTimeout(() => {
       setMeteors((prev) => prev.filter((m) => m.id !== id));
       spawnImpact(targetX, targetY);
-      missedWordsRef.current.push({ hanzi: word.hanzi, pinyin: word.pinyin, meaning: word.meaning });
+      missedWordsRef.current.push({ wordId: word.wordId, hanzi: word.hanzi, pinyin: word.pinyin, meaning: word.meaning });
       setLives((l) => Math.max(0, l - 1));
       setStreak(0);
       triggerShake();
@@ -428,8 +490,11 @@ export default function App() {
     setTimeout(() => setBursts((prev) => prev.filter((b) => b.id !== id)), 1000);
   }
 
-  function startGame() {
-    if (deck.length < 4) return;
+  function startGame(usePractice) {
+    const source = usePractice ? wrongWordsRef.current : deck;
+    if (source.length < (usePractice ? 1 : 4)) return;
+    sessionDeckRef.current = source;
+    setPracticeMode(!!usePractice);
     instanceCounter.current = 0;
     spawnTimerRef.current = 1800;
     bufferRef.current = "";
@@ -464,6 +529,17 @@ export default function App() {
     const accuracy = totalHit + totalMissed > 0 ? Math.round((totalHit / (totalHit + totalMissed)) * 100) : 100;
     setSummary({ hit: [...hitMap.values()], missed: [...missedMap.values()], accuracy, maxCombo: maxStreakRef.current, shotCount: totalHit });
     setRecapTab(missedMap.size > 0 ? "missed" : "hit");
+
+    const hitIds = new Set(hitWordsRef.current.map((w) => w.wordId).filter(Boolean));
+    const newWrong = new Map(wrongWordsRef.current.map((w) => [w.id, w]));
+    missedWordsRef.current.forEach((w) => {
+      if (!w.wordId || hitIds.has(w.wordId)) return; // fixed later in the same session, don't re-add
+      if (!newWrong.has(w.wordId)) newWrong.set(w.wordId, { id: w.wordId, hanzi: w.hanzi, pinyin: w.pinyin, meaning: w.meaning });
+    });
+    hitIds.forEach((id) => newWrong.delete(id));
+    const nextWrong = [...newWrong.values()];
+    wrongWordsRef.current = nextWrong;
+    setWrongWords(nextWrong);
 
     setScreen("gameover");
   }
@@ -590,6 +666,8 @@ export default function App() {
         .fd-btn--primary:hover:not(:disabled) { filter: brightness(1.06); }
         .fd-btn--secondary { background: rgba(127,217,196,0.08); color: var(--teal); border: 1px solid #3d5850; }
         .fd-btn--secondary:hover { background: rgba(127,217,196,0.16); }
+        .fd-btn--wrong { background: rgba(214,82,74,0.1); color: #ef8b83; border: 1px solid rgba(214,82,74,0.45); }
+        .fd-btn--wrong:hover { background: rgba(214,82,74,0.18); }
         .fd-btn--ghost { background: transparent; color: #b9aecb; border: 1px solid var(--border); }
         .fd-hint { font-size: 12px; color: #b9aecb; text-align: center; margin-top: 10px; line-height: 1.55; }
 
@@ -645,8 +723,24 @@ export default function App() {
         .fd-arena--shake { animation: fd-shake 0.3s ease; }
 
         .fd-star { position: absolute; background: #fff; border-radius: 50%; animation: fd-twinkle 3.2s ease-in-out infinite; }
-        .fd-nebula { position: absolute; border-radius: 50%; filter: blur(26px); mix-blend-mode: screen; pointer-events: none; }
-        .fd-planet { position: absolute; border-radius: 50%; pointer-events: none; }
+        .fd-nebula { position: absolute; border-radius: 50%; filter: blur(26px); mix-blend-mode: screen; pointer-events: none; animation: fd-nebula-drift ease-in-out infinite alternate; }
+        .fd-planet { position: absolute; border-radius: 50%; pointer-events: none; animation: fd-planet-spin linear infinite; }
+        .fd-planet-spot { position: absolute; top: 14%; left: 58%; width: 30%; height: 30%; border-radius: 50%; background: rgba(0,0,0,0.28); }
+        .fd-aurora { position: absolute; inset: -25%; pointer-events: none; mix-blend-mode: screen; opacity: 0.5; filter: blur(70px) saturate(1.3); animation: fd-aurora-shift 30s linear infinite; background: conic-gradient(from 0deg at 50% 30%, rgba(126,74,189,0.3), rgba(46,167,177,0.25), rgba(198,80,120,0.25), rgba(230,187,92,0.15), rgba(126,74,189,0.3)); }
+        .fd-bg-scene--lite .fd-aurora, .fd-bg-scene--lite .fd-nebula { animation-play-state: paused; }
+        .fd-bg-scene--lite .fd-aurora { filter: blur(35px) saturate(1.2); opacity: 0.35; }
+        .fd-bg-scene--lite .fd-nebula { filter: blur(14px); }
+        .fd-shooting-star { position: absolute; width: 0; height: 0; opacity: 0; animation: fd-shoot linear infinite; }
+        .fd-shooting-star-inner { position: absolute; width: 130px; height: 0; transform-origin: right center; }
+        .fd-shooting-star-inner::before {
+          content: ""; position: absolute; right: 4px; top: 0; width: 100%; height: 1.5px;
+          background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 35%, rgba(255,255,255,0.75) 85%, rgba(255,255,255,0.95) 100%);
+          border-radius: 3px; filter: blur(0.4px);
+        }
+        .fd-shooting-star-inner::after {
+          content: ""; position: absolute; right: 0; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%;
+          background: #fff; box-shadow: 0 0 10px 3px rgba(255,255,255,0.9), 0 0 22px 7px rgba(190,210,255,0.45);
+        }
         .fd-moon { position: absolute; top: 6%; right: 8%; width: clamp(60px,12vw,110px); height: clamp(60px,12vw,110px); border-radius: 50%; background: radial-gradient(circle at 38% 35%, #fbfcff 0%, #dfe3f2 55%, #c7cce0 100%); box-shadow: 0 0 60px 22px rgba(232,236,250,0.18), 0 0 120px 50px rgba(232,236,250,0.08); }
         .fd-moon i { position: absolute; border-radius: 50%; background: rgba(150,155,180,0.35); }
 
@@ -662,7 +756,7 @@ export default function App() {
 
         .fd-strike-line { position: absolute; left: 0; right: 0; top: 90%; border-top: 1px dashed rgba(230,187,92,0.2); }
 
-        .fd-word { position: absolute; transform: translate(-50%, -50%); transition: top 0.05s linear, left 0.05s linear; text-align: center; pointer-events: none; max-width: 140px; }
+        .fd-word { position: absolute; transform: translate(-50%, -50%); will-change: top, left; text-align: center; pointer-events: none; max-width: 140px; }
         .fd-word-hz { font-family: 'Noto Serif SC', serif; font-weight: 700; font-size: clamp(19px, 4.2vw, 27px); color: var(--text-soft); text-shadow: 0 0 14px rgba(238,240,247,0.35), 0 2px 4px rgba(0,0,0,0.6); white-space: nowrap; }
         .fd-word-vn { font-family: 'Be Vietnam Pro', sans-serif; font-weight: 700; font-size: clamp(14px, 3vw, 18px); color: var(--text-soft); text-shadow: 0 0 10px rgba(238,240,247,0.3), 0 2px 4px rgba(0,0,0,0.6); line-height: 1.2; white-space: nowrap; }
         .fd-word--target .fd-word-hz, .fd-word--target .fd-word-vn { color: var(--gold); text-shadow: 0 0 18px rgba(230,187,92,0.75), 0 2px 4px rgba(0,0,0,0.6); }
@@ -721,7 +815,16 @@ export default function App() {
         .fd-recap-mn { font-size: 13px; color: #cfc6dc; margin-top: 3px; }
         .fd-loading { color: #b9aecb; font-size: 14px; margin-top: 40px; }
 
-        @keyframes fd-twinkle { 0%,100% { opacity: 0.25; } 50% { opacity: 1; } }
+        @keyframes fd-twinkle { 0%,100% { opacity: 0.1; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.4); } }
+        @keyframes fd-aurora-shift { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes fd-nebula-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(4%, -3%) scale(1.08); } }
+        @keyframes fd-planet-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes fd-shoot {
+          0%, 95.5% { opacity: 0; transform: translate(0, 0); }
+          96% { opacity: 1; }
+          99% { transform: translate(var(--dx, 260px), var(--dy, 150px)); opacity: 0; }
+          100% { opacity: 0; }
+        }
         @keyframes fd-plane-idle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
         @keyframes fd-meteor-tumble { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes fd-impact-pop { 0% { transform: translate(-50%,-50%) scale(0.3); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.8); opacity: 0; } }
@@ -731,9 +834,34 @@ export default function App() {
         @keyframes fd-burst-miss { 0% { transform: translate(-50%,-50%) scale(1); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
       `}</style>
 
-      <div className="fd-bg-scene">
+      <div className={`fd-bg-scene ${isMobile && screen === "playing" ? "fd-bg-scene--lite" : ""}`}>
+        <div className="fd-aurora" />
+        {nebulae.map((n, i) => (
+          <div key={i} className="fd-nebula" style={{
+            left: n.left, right: n.right, top: n.top, bottom: n.bottom, width: n.width, height: n.height,
+            background: `radial-gradient(circle, rgba(${n.color},0.5) 0%, rgba(${n.color},0) 70%)`,
+            animationDuration: `${n.dur}s`, animationDelay: `${n.delay}s`,
+          }} />
+        ))}
+        {planets.map((p, i) => (
+          <div key={i} className="fd-planet" style={{
+            left: p.left, top: p.top, width: p.size, height: p.size,
+            background: p.bg, boxShadow: p.glow, animationDuration: `${p.dur}s`,
+          }}>
+            <span className="fd-planet-spot" />
+          </div>
+        ))}
         {stars.map((s, i) => (
           <div key={i} className="fd-star" style={{ left: `${s.left}%`, top: `${s.top}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s` }} />
+        ))}
+        {shootingStars.map((sh, i) => (
+          <div key={i} className="fd-shooting-star" style={{
+            left: `${sh.left}%`, top: `${sh.top}%`,
+            "--dx": `${sh.dx}px`, "--dy": `${sh.dy}px`,
+            animationDuration: `${sh.dur}s`, animationDelay: `${sh.delay}s`,
+          }}>
+            <div className="fd-shooting-star-inner" style={{ transform: `rotate(${sh.angleDeg}deg)` }} />
+          </div>
         ))}
         <div className="fd-moon"><i style={{ width: 10, height: 10, top: 18, left: 22 }} /><i style={{ width: 6, height: 6, top: 34, left: 40 }} /></div>
       </div>
@@ -771,9 +899,14 @@ export default function App() {
             </div>
           </div>
 
-          <button className="fd-btn fd-btn--primary" disabled={deck.length < 4} onClick={startGame}>
+          <button className="fd-btn fd-btn--primary" disabled={deck.length < 4} onClick={() => startGame(false)}>
             弓 Bắt đầu chơi
           </button>
+          {wrongWords.length > 0 && (
+            <button className="fd-btn fd-btn--wrong" onClick={() => startGame(true)}>
+              ✕ Luyện lại từ đã sai ({wrongWords.length})
+            </button>
+          )}
           <button className="fd-btn fd-btn--secondary" onClick={() => setScreen("manage")}>
             Quản lý kho từ vựng
           </button>
@@ -785,7 +918,9 @@ export default function App() {
             {" "}Gõ trúng chữ cái nào khớp với pinyin của một chữ đang rơi thì mũi tên sẽ bay
             vào đúng chữ đó, không quan trọng chữ nào xuất hiện trước — gõ sai là mất hết,
             phải gõ lại từ đầu. Để chữ rơi chạm đáy là mất 1 mạng. Mỗi từ trong kho chỉ xuất
-            hiện 1 lần trong một ván — hết từ là hoàn thành ván chơi.
+            hiện 1 lần trong một ván — hết từ là hoàn thành ván chơi. Từ nào bị lỡ sẽ tự
+            vào danh sách "từ đã sai"; gõ trúng lại (kể cả lúc luyện tập) sẽ xoá nó khỏi
+            danh sách đó.
           </div>
         </div>
       )}
@@ -848,11 +983,6 @@ export default function App() {
           </div>
 
           <div className={`fd-arena ${shake ? "fd-arena--shake" : ""}`} onClick={() => !isMobile && screen === "playing" && inputRef.current && inputRef.current.focus()}>
-            <div className="fd-nebula" style={{ left: "-8%", top: "5%", width: "60%", height: "55%", background: "radial-gradient(circle, rgba(126,74,189,0.55) 0%, rgba(126,74,189,0) 70%)" }} />
-            <div className="fd-nebula" style={{ right: "-10%", top: "30%", width: "55%", height: "50%", background: "radial-gradient(circle, rgba(46,167,177,0.4) 0%, rgba(46,167,177,0) 70%)" }} />
-            <div className="fd-nebula" style={{ left: "20%", bottom: "-10%", width: "50%", height: "40%", background: "radial-gradient(circle, rgba(198,80,120,0.3) 0%, rgba(198,80,120,0) 70%)" }} />
-            <div className="fd-planet" style={{ left: "8%", top: "14%", width: 16, height: 16, background: "radial-gradient(circle at 35% 30%, #f0a86e 0%, #a85a3a 70%)", boxShadow: "0 0 14px 3px rgba(240,168,110,0.3)" }} />
-            <div className="fd-planet" style={{ left: "18%", top: "60%", width: 8, height: 8, background: "radial-gradient(circle at 35% 30%, #9fd6e0 0%, #3d7d8a 70%)" }} />
             <div className="fd-strike-line" />
 
             {fallingWords.map((w) => {
@@ -1009,7 +1139,9 @@ export default function App() {
             </div>
           )}
 
-          <button className="fd-btn fd-btn--primary" onClick={startGame}>Chơi lại</button>
+          <button className="fd-btn fd-btn--primary" disabled={practiceMode && wrongWords.length === 0} onClick={() => startGame(practiceMode)}>
+            {practiceMode && wrongWords.length === 0 ? "Đã hết từ sai để luyện!" : "Chơi lại"}
+          </button>
           <button className="fd-btn fd-btn--ghost" onClick={() => setScreen("menu")}>Về menu</button>
           </div>
         </div>
