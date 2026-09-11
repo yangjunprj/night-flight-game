@@ -133,17 +133,21 @@ export default function App() {
   const errorAudioRef = useRef(null);
   const audioCtxRef = useRef(null);
 
-  function playErrorSound() {
-    if (!voiceOnRef.current) return;
+  function playErrorSound(onDone) {
+    if (!voiceOnRef.current) { if (onDone) onDone(); return; }
     try {
       if (!errorAudioRef.current) {
         errorAudioRef.current = new Audio(ERROR_SOUND_SRC);
         errorAudioRef.current.volume = 0.55;
       }
       const a = errorAudioRef.current;
+      a.onended = () => { if (onDone) onDone(); };
       a.currentTime = 0;
-      a.play().catch(() => {});
-    } catch (e) {}
+      const p = a.play();
+      if (p && p.catch) p.catch(() => { if (onDone) onDone(); });
+    } catch (e) {
+      if (onDone) onDone();
+    }
   }
 
   function playClickSound() {
@@ -358,7 +362,7 @@ export default function App() {
     fallingWordsRef.current = remain;
     setFallingWords(remain);
     if (missed.length) {
-      missed.forEach((w) => { spawnMeteor(w); playErrorSound(); speakWord(w.hanzi); });
+      missed.forEach((w) => { spawnMeteor(w); playErrorSound(() => speakWord(w.hanzi)); });
     }
     if (remain.length === 0 && sessionDeckRef.current.length > 0 && usedWordIdsRef.current.size >= sessionDeckRef.current.length) {
       endGame();
