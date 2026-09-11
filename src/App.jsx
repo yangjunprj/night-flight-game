@@ -40,56 +40,9 @@ const SAMPLE_DECK = [
   { id: "s12", hanzi: "水", pinyin: "shuǐ", meaning: "nước" },
 ];
 
+
 export default function App() {
   const [loaded, setLoaded] = useState(false);
-
-  // ---------- "Add to Home Screen" install prompt ----------
-  const [installPromptEvent, setInstallPromptEvent] = useState(null); // Android/Chromium: captured beforeinstallprompt
-  const [isStandalone, setIsStandalone] = useState(false); // already running as an installed app
-  const [showIOSInstall, setShowIOSInstall] = useState(false); // iOS has no programmatic prompt - show manual steps
-  const [showInstallUnsupported, setShowInstallUnsupported] = useState(false); // desktop/other browsers
-
-  useEffect(() => {
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      window.navigator.standalone === true;
-    setIsStandalone(standalone);
-
-    const onBeforeInstall = (e) => {
-      e.preventDefault();
-      setInstallPromptEvent(e);
-    };
-    const onInstalled = () => {
-      setIsStandalone(true);
-      setInstallPromptEvent(null);
-    };
-    window.addEventListener("beforeinstallprompt", onBeforeInstall);
-    window.addEventListener("appinstalled", onInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstall);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, []);
-
-  async function handleInstallClick() {
-    if (installPromptEvent) {
-      // Android / Chromium: this shows the real native "Install app?" system dialog
-      installPromptEvent.prompt();
-      try {
-        await installPromptEvent.userChoice;
-      } catch (e) {}
-      setInstallPromptEvent(null);
-      return;
-    }
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    if (isIOS) {
-      // iOS Safari gives web pages no API to trigger the native dialog -
-      // the only option is to show the manual steps ourselves.
-      setShowIOSInstall(true);
-      return;
-    }
-    setShowInstallUnsupported(true);
-  }
   const [screen, setScreen] = useState("loading");
   const [deck, setDeck] = useState([]);
   const [bestScore, setBestScore] = useState(0);
@@ -145,8 +98,74 @@ export default function App() {
   const [wrongWords, setWrongWords] = useState([]);
   const wrongWordsRef = useRef([]);
   const [practiceMode, setPracticeMode] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const voiceOnRef = useRef(true);
+  const zhVoiceRef = useRef(null);
 
   useEffect(() => { wrongWordsRef.current = wrongWords; }, [wrongWords]);
+  useEffect(() => { voiceOnRef.current = voiceOn; }, [voiceOn]);
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    const pickVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      zhVoiceRef.current = voices.find((v) => v.lang === "zh-CN") || voices.find((v) => /^zh/i.test(v.lang)) || null;
+    };
+    pickVoice();
+    window.speechSynthesis.addEventListener("voiceschanged", pickVoice);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", pickVoice);
+  }, []);
+
+  function speakWord(hanzi) {
+    if (!voiceOnRef.current || !hanzi) return;
+    if (!("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(hanzi);
+      utter.lang = "zh-CN";
+      if (zhVoiceRef.current) utter.voice = zhVoiceRef.current;
+      utter.rate = 0.9;
+      window.speechSynthesis.speak(utter);
+    } catch (e) {}
+  }
+
+  const errorAudioRef = useRef(null);
+  const audioCtxRef = useRef(null);
+
+  function playErrorSound() {
+    if (!voiceOnRef.current) return;
+    try {
+      if (!errorAudioRef.current) {
+        errorAudioRef.current = new Audio("./sfx/miss.mp3");
+        errorAudioRef.current.volume = 0.55;
+      }
+      const a = errorAudioRef.current;
+      a.currentTime = 0;
+      a.play().catch(() => {});
+    } catch (e) {}
+  }
+
+  function playClickSound() {
+    if (!voiceOnRef.current) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.setValueAtTime(190, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(90, ctx.currentTime + 0.07);
+      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.08);
+    } catch (e) {}
+  }
 
   useEffect(() => {
     const mq = window.matchMedia("(pointer: coarse)");
@@ -338,7 +357,7 @@ export default function App() {
     fallingWordsRef.current = remain;
     setFallingWords(remain);
     if (missed.length) {
-      missed.forEach((w) => spawnMeteor(w));
+      missed.forEach((w) => { spawnMeteor(w); playErrorSound(); speakWord(w.hanzi); });
     }
     if (remain.length === 0 && sessionDeckRef.current.length > 0 && usedWordIdsRef.current.size >= sessionDeckRef.current.length) {
       endGame();
@@ -476,6 +495,7 @@ export default function App() {
     }
     if (wrongHappened) {
       setStreak(0);
+      playClickSound();
       shakeTargets.forEach((id) => triggerWordShake(id));
     }
   }
@@ -530,6 +550,7 @@ export default function App() {
 
   function addBurst(word, isMiss, gain) {
     const id = ++burstCounter.current;
+    if (!isMiss) speakWord(word.hanzi);
     const label = mode === "vn" ? word.hanzi : (word.meaning || word.hanzi);
     setBursts((prev) => [...prev, {
       id, x: word.x, y: isMiss ? 88 : word.y,
@@ -624,12 +645,9 @@ export default function App() {
           color: var(--text-soft);
           background: var(--night-bottom);
           min-height: 100vh;
-          min-height: 100dvh;
           width: 100%;
           box-sizing: border-box;
           padding: clamp(10px, 2.5vw, 22px);
-          padding-top: calc(clamp(10px, 2.5vw, 22px) + env(safe-area-inset-top));
-          padding-bottom: calc(clamp(10px, 2.5vw, 22px) + env(safe-area-inset-bottom));
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -744,8 +762,8 @@ export default function App() {
         .fd-empty { color: #b9aecb; font-size: 13px; text-align: center; padding: 18px 0; }
 
         /* ---- game screen: true fullscreen ---- */
-        .fd-game-wrap { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; z-index: 5; display: flex; flex-direction: column; }
-        .fd-hud { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; padding-top: calc(18px + env(safe-area-inset-top)); padding-left: calc(22px + env(safe-area-inset-left)); padding-right: calc(22px + env(safe-area-inset-right)); pointer-events: none; }
+        .fd-game-wrap { position: fixed; inset: 0; width: 100vw; height: 100vh; z-index: 5; display: flex; flex-direction: column; }
+        .fd-hud { position: absolute; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 18px 22px; pointer-events: none; }
         .fd-hud > * { pointer-events: auto; }
         .fd-hud-pill { display: flex; align-items: center; gap: 7px; background: rgba(8,5,16,0.55); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 7px 14px; font-size: 14px; font-weight: 800; color: var(--gold); backdrop-filter: blur(4px); }
         .fd-hud-streak { color: var(--teal); font-size: 12.5px; font-weight: 700; }
@@ -883,44 +901,6 @@ export default function App() {
         @keyframes fd-word-shake { 0%,100% { transform: translate(-50%,-50%) translateX(0); } 25% { transform: translate(-50%,-50%) translateX(-6px); } 50% { transform: translate(-50%,-50%) translateX(6px); } 75% { transform: translate(-50%,-50%) translateX(-4px); } }
         @keyframes fd-burst-success { 0% { transform: translate(-50%,-50%) scale(0.6); opacity: 0; } 30% { transform: translate(-50%,-50%) scale(1.2); opacity: 1; } 100% { transform: translate(-50%,-120%) scale(0.9); opacity: 0; } }
         @keyframes fd-burst-miss { 0% { transform: translate(-50%,-50%) scale(1); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.4); opacity: 0; } }
-
-        /* ---- persistent "install app" button ---- */
-        .fd-install-fab {
-          position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom));
-          transform: translateX(-50%);
-          z-index: 50;
-          display: flex; align-items: center; gap: 8px;
-          background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%);
-          color: #241a29; font-family: 'Be Vietnam Pro', sans-serif; font-weight: 800; font-size: 12.5px;
-          border: none; border-radius: 999px; padding: 10px 16px;
-          box-shadow: 0 4px 14px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.15) inset;
-          cursor: pointer; white-space: nowrap;
-          animation: fd-install-fab-in 0.4s ease both;
-        }
-        .fd-install-fab-icon { font-size: 15px; }
-        @keyframes fd-install-fab-in { from { opacity: 0; transform: translateX(-50%) translateY(10px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-
-        .fd-modal-overlay {
-          position: fixed; inset: 0; z-index: 100;
-          background: rgba(2,1,6,0.72); backdrop-filter: blur(3px);
-          display: flex; align-items: center; justify-content: center; padding: 20px;
-        }
-        .fd-modal {
-          position: relative; width: 100%; max-width: 380px;
-          background: linear-gradient(180deg, #1c1330 0%, #0e0a1c 100%);
-          border: 1px solid var(--border); border-radius: 16px;
-          padding: 26px 20px 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.6);
-        }
-        .fd-modal-close {
-          position: absolute; top: 10px; right: 10px; width: 28px; height: 28px;
-          border-radius: 50%; border: 1px solid var(--border); background: rgba(255,255,255,0.05);
-          color: #cfc6dc; font-size: 16px; line-height: 1; cursor: pointer;
-        }
-        .fd-modal-title { font-family: 'Ma Shan Zheng', cursive; font-size: 22px; color: var(--gold); margin-bottom: 10px; }
-        .fd-modal-note { font-size: 13px; color: #b9aecb; line-height: 1.5; margin-bottom: 14px; }
-        .fd-modal-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 12px; }
-        .fd-modal-steps li { font-size: 13.5px; line-height: 1.5; color: var(--text-soft); }
-        .fd-modal-step-icon { margin-right: 4px; }
       `}</style>
 
       <div className={`fd-bg-scene ${isMobile && screen === "playing" ? "fd-bg-scene--lite" : ""}`}>
@@ -1067,6 +1047,9 @@ export default function App() {
               <div className="fd-lives">
                 {[0, 1, 2].map((i) => <span key={i} className={i < lives ? "" : "fd-life--lost"}>🚀</span>)}
               </div>
+              <button className="fd-exit" onClick={() => setVoiceOn((v) => !v)} aria-label="Bật/tắt giọng đọc">
+                {voiceOn ? "🔊" : "🔇"}
+              </button>
               <button className="fd-exit" onClick={exitToMenu} aria-label="Thoát">✕</button>
             </div>
           </div>
@@ -1232,45 +1215,6 @@ export default function App() {
             {practiceMode && wrongWords.length === 0 ? "Đã hết từ sai để luyện!" : "Chơi lại"}
           </button>
           <button className="fd-btn fd-btn--ghost" onClick={() => setScreen("menu")}>Về menu</button>
-          </div>
-        </div>
-      )}
-
-      {/* persistent install button - stays on screen (no dismiss/close control) until the app is
-          actually installed. Hidden only during active gameplay so it doesn't sit on top of the
-          on-screen keyboard/typing area. */}
-      {!isStandalone && screen !== "playing" && (
-        <button className="fd-install-fab" onClick={handleInstallClick}>
-          <span className="fd-install-fab-icon">📲</span>
-          <span>Cài đặt App / Thêm ra màn hình chính</span>
-        </button>
-      )}
-
-      {showIOSInstall && (
-        <div className="fd-modal-overlay" onClick={() => setShowIOSInstall(false)}>
-          <div className="fd-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="fd-modal-close" onClick={() => setShowIOSInstall(false)}>×</button>
-            <div className="fd-modal-title">Thêm 陽俊 ra màn hình chính</div>
-            <div className="fd-modal-note">
-              Safari trên iPhone/iPad không cho phép web tự mở hộp thoại này — bạn cần làm 3 bước thủ công sau:
-            </div>
-            <ol className="fd-modal-steps">
-              <li><span className="fd-modal-step-icon">⬆️</span> Mở game bằng <b>Safari</b>, bấm nút <b>Chia sẻ</b> (hình vuông có mũi tên) ở thanh dưới trình duyệt.</li>
-              <li><span className="fd-modal-step-icon">➕</span> Trong danh sách hiện ra, chọn <b>"Thêm vào MH chính" / "Add to Home Screen"</b>.</li>
-              <li><span className="fd-modal-step-icon">✅</span> Bấm <b>"Thêm"</b> ở góc trên — icon 陽俊 sẽ xuất hiện ở màn hình chính như một app thật.</li>
-            </ol>
-          </div>
-        </div>
-      )}
-
-      {showInstallUnsupported && (
-        <div className="fd-modal-overlay" onClick={() => setShowInstallUnsupported(false)}>
-          <div className="fd-modal" onClick={(e) => e.stopPropagation()}>
-            <button className="fd-modal-close" onClick={() => setShowInstallUnsupported(false)}>×</button>
-            <div className="fd-modal-title">Chưa thể cài trực tiếp</div>
-            <div className="fd-modal-note">
-              Trình duyệt hiện tại chưa hỗ trợ cài đặt tự động. Trên điện thoại, hãy mở link này bằng <b>Chrome (Android)</b> hoặc <b>Safari (iPhone/iPad)</b> để cài ra màn hình chính.
-            </div>
           </div>
         </div>
       )}
