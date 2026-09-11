@@ -40,6 +40,7 @@ const SAMPLE_DECK = [
   { id: "s12", hanzi: "水", pinyin: "shuǐ", meaning: "nước" },
 ];
 
+const ERROR_SOUND_SRC = "./assets/error-sound.mp3";
 
 export default function App() {
   const [loaded, setLoaded] = useState(false);
@@ -136,7 +137,7 @@ export default function App() {
     if (!voiceOnRef.current) return;
     try {
       if (!errorAudioRef.current) {
-        errorAudioRef.current = new Audio("./sfx/miss.mp3");
+        errorAudioRef.current = new Audio(ERROR_SOUND_SRC);
         errorAudioRef.current.volume = 0.55;
       }
       const a = errorAudioRef.current;
