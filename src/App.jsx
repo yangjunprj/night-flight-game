@@ -362,7 +362,7 @@ export default function App() {
     fallingWordsRef.current = remain;
     setFallingWords(remain);
     if (missed.length) {
-      missed.forEach((w) => { spawnMeteor(w); playErrorSound(() => speakWord(w.hanzi)); });
+      missed.forEach((w) => { spawnMeteor(w); playErrorSound(); setTimeout(() => speakWord(w.hanzi), 250); });
     }
     if (remain.length === 0 && sessionDeckRef.current.length > 0 && usedWordIdsRef.current.size >= sessionDeckRef.current.length) {
       endGame();
