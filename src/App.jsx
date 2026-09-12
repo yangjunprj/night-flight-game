@@ -99,6 +99,10 @@ export default function App() {
   const [wrongWords, setWrongWords] = useState([]);
   const wrongWordsRef = useRef([]);
   const [practiceMode, setPracticeMode] = useState(false);
+  const [relaxMode, setRelaxMode] = useState(false);
+  const relaxModeRef = useRef(false);
+  useEffect(() => { relaxModeRef.current = relaxMode; }, [relaxMode]);
+  const [showHelp, setShowHelp] = useState(false);
   const [voiceOn, setVoiceOn] = useState(true);
   const voiceOnRef = useRef(true);
   const zhVoiceRef = useRef(null);
@@ -238,6 +242,7 @@ export default function App() {
     let loadedBest = 0;
     let loadedMode = "hz";
     let loadedWrong = [];
+    let loadedRelax = false;
     try {
       const raw = localStorage.getItem("fd_deck");
       if (raw) loadedDeck = JSON.parse(raw);
@@ -254,11 +259,16 @@ export default function App() {
       const raw4 = localStorage.getItem("fd_wrong_words");
       if (raw4) loadedWrong = JSON.parse(raw4);
     } catch (e) {}
+    try {
+      const raw5 = localStorage.getItem("fd_relax_mode");
+      if (raw5) loadedRelax = JSON.parse(raw5);
+    } catch (e) {}
     if (!loadedDeck || loadedDeck.length === 0) loadedDeck = SAMPLE_DECK;
     setDeck(loadedDeck);
     setBestScore(loadedBest || 0);
     setMode(loadedMode === "vn" || loadedMode === "both" ? loadedMode : "hz");
     setWrongWords(Array.isArray(loadedWrong) ? loadedWrong : []);
+    setRelaxMode(!!loadedRelax);
     setLoaded(true);
     setScreen("menu");
   }, []);
@@ -272,6 +282,11 @@ export default function App() {
     if (!loaded) return;
     try { localStorage.setItem("fd_display_mode", JSON.stringify(mode)); } catch (e) {}
   }, [mode, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem("fd_relax_mode", JSON.stringify(relaxMode)); } catch (e) {}
+  }, [relaxMode, loaded]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -532,7 +547,7 @@ export default function App() {
       setMeteors((prev) => prev.filter((m) => m.id !== id));
       spawnImpact(targetX, targetY);
       missedWordsRef.current.push({ wordId: word.wordId, hanzi: word.hanzi, pinyin: word.pinyin, meaning: word.meaning });
-      setLives((l) => Math.max(0, l - 1));
+      if (!relaxModeRef.current) setLives((l) => Math.max(0, l - 1));
       setStreak(0);
       triggerShake();
     }, dur + 15);
@@ -658,7 +673,6 @@ export default function App() {
         }
         .fd-brand, .fd-panel, .fd-loading { position: relative; z-index: 1; }
 
-        .fd-title { font-family: 'Ma Shan Zheng', cursive; font-size: clamp(34px, 7vw, 52px); color: var(--gold); text-shadow: 0 2px 0 #000, 0 0 24px rgba(230,187,92,0.3); margin: 0 0 14px; letter-spacing: 2px; }
         .fd-brand { text-align: center; margin-bottom: 22px; animation: fd-brand-in 0.7s ease both; }
         .fd-brand-ornament { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 8px; }
         .fd-brand-line { width: 46px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-deep), transparent); }
@@ -675,7 +689,6 @@ export default function App() {
         }
         .fd-brand-tagline { margin-top: 8px; font-size: 12px; letter-spacing: 3px; text-transform: uppercase; color: #b9aecb; }
         @keyframes fd-brand-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-        .fd-subtitle { font-weight: 700; font-size: clamp(12px, 1.8vw, 15px); color: #b9aecb; margin-top: -2px; margin-bottom: 14px; text-align: center; }
 
         .fd-panel {
           position: relative;
@@ -689,6 +702,8 @@ export default function App() {
           width: min(92vw, 520px);
         }
         .fd-menu-stats { display: flex; gap: 10px; margin: 16px 0 20px; }
+        .fd-menu-stats--3 .fd-stat { min-width: 0; }
+        .fd-stat--wrong b { color: var(--lantern, #ef8b83); }
         .fd-menu-stats--go { display: grid; grid-template-columns: repeat(4, 1fr); }
 
         .fd-gameover-overlay {
@@ -720,6 +735,7 @@ export default function App() {
         .fd-stat b { display: block; font-size: 22px; color: var(--gold); font-family: 'Noto Serif SC', serif; }
         .fd-stat span { font-size: 11px; color: #b9aecb; }
 
+        .fd-menu-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: #8a7f9c; font-weight: 700; margin: 4px 2px 6px; }
         .fd-mode-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 14px; }
         .fd-mode-opt { flex: 1; text-align: center; padding: 10px 4px; font-size: 11px; font-weight: 700; cursor: pointer; background: rgba(0,0,0,0.2); color: #b9aecb; transition: background 0.15s, color 0.15s; line-height: 1.3; }
         .fd-mode-opt--on { background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%); color: #241a29; }
@@ -735,6 +751,44 @@ export default function App() {
         .fd-btn--wrong:hover { background: rgba(214,82,74,0.18); }
         .fd-btn--ghost { background: transparent; color: #b9aecb; border: 1px solid var(--border); }
         .fd-hint { font-size: 12px; color: #b9aecb; text-align: center; margin-top: 10px; line-height: 1.55; }
+
+        .fd-help-fab {
+          position: absolute; top: 14px; right: 14px; z-index: 2;
+          width: 28px; height: 28px; border-radius: 50%;
+          background: rgba(127,217,196,0.12); border: 1px solid rgba(127,217,196,0.4);
+          color: var(--teal); font-family: 'Be Vietnam Pro', sans-serif; font-weight: 800; font-size: 13px;
+          display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .fd-help-fab:hover { background: rgba(127,217,196,0.22); }
+
+        .fd-help-overlay {
+          position: fixed; inset: 0; z-index: 60;
+          display: flex; align-items: center; justify-content: center; padding: 16px;
+          background: radial-gradient(circle at 50% 30%, rgba(60,30,110,0.35) 0%, rgba(3,2,10,0.72) 65%, rgba(2,1,8,0.85) 100%);
+          backdrop-filter: blur(9px) saturate(1.1); -webkit-backdrop-filter: blur(9px) saturate(1.1);
+          animation: fd-go-fade 0.25s ease;
+        }
+        .fd-help-modal {
+          position: relative;
+          background: linear-gradient(180deg, rgba(30,18,45,0.88) 0%, rgba(16,10,28,0.94) 100%);
+          border: 1px solid rgba(160,140,200,0.35);
+          border-radius: 16px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.6), 0 0 80px rgba(126,74,189,0.25);
+          backdrop-filter: blur(9px) saturate(1.1); -webkit-backdrop-filter: blur(9px) saturate(1.1);
+          padding: 22px clamp(16px,3vw,26px) 20px;
+          width: min(92vw, 440px);
+          max-height: 80vh; overflow-y: auto;
+        }
+        .fd-help-modal-title { font-family: 'Noto Serif SC', serif; font-size: 19px; color: var(--gold); text-align: center; margin: 0 0 16px; }
+        .fd-help-close {
+          position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%;
+          background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.12); color: #cfc6dc;
+          font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .fd-help-close:hover { border-color: var(--lantern); color: var(--lantern); }
+        .fd-help-content { display: flex; flex-direction: column; gap: 11px; margin-bottom: 18px; }
+        .fd-help-row { display: flex; align-items: flex-start; gap: 9px; font-size: 12.5px; color: #b9aecb; line-height: 1.5; }
+        .fd-help-row span:first-child { flex: 0 0 auto; font-size: 15px; line-height: 1.5; }
 
         .fd-form-row { display: flex; gap: 8px; margin-bottom: 8px; }
         .fd-input, .fd-textarea { width: 100%; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 6px; color: var(--text-soft); padding: 9px 10px; font-family: 'Be Vietnam Pro', sans-serif; font-size: 14px; outline: none; }
@@ -796,13 +850,10 @@ export default function App() {
           animation: fd-galaxy-drift 90s ease-in-out infinite alternate;
         }
         .fd-bg-scene--lite .fd-galaxy-bg { animation-play-state: paused; opacity: 0.3; }
-        .fd-nebula { position: absolute; border-radius: 50%; filter: blur(26px); mix-blend-mode: screen; pointer-events: none; animation: fd-nebula-drift ease-in-out infinite alternate; }
         .fd-planet { position: absolute; border-radius: 50%; pointer-events: none; animation: fd-planet-spin linear infinite; }
         .fd-planet-spot { position: absolute; top: 14%; left: 58%; width: 30%; height: 30%; border-radius: 50%; background: rgba(0,0,0,0.28); }
         .fd-aurora { position: absolute; inset: -25%; pointer-events: none; mix-blend-mode: screen; opacity: 0.5; filter: blur(70px) saturate(1.3); animation: fd-aurora-shift 30s linear infinite; background: conic-gradient(from 0deg at 50% 30%, rgba(126,74,189,0.3), rgba(46,167,177,0.25), rgba(198,80,120,0.25), rgba(230,187,92,0.15), rgba(126,74,189,0.3)); }
-        .fd-bg-scene--lite .fd-aurora, .fd-bg-scene--lite .fd-nebula { animation-play-state: paused; }
-        .fd-bg-scene--lite .fd-aurora { filter: blur(35px) saturate(1.2); opacity: 0.35; }
-        .fd-bg-scene--lite .fd-nebula { filter: blur(14px); }
+        .fd-bg-scene--lite .fd-aurora { animation-play-state: paused; filter: blur(35px) saturate(1.2); opacity: 0.35; }
         .fd-shooting-star { position: absolute; width: 0; height: 0; opacity: 0; animation: fd-shoot linear infinite; }
         .fd-shooting-star-inner { position: absolute; width: 130px; height: 0; transform-origin: right center; }
         .fd-shooting-star-inner::before {
@@ -823,17 +874,14 @@ export default function App() {
           animation: fd-earth-scroll 34s linear infinite;
         }
         .fd-earth-shade { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.4) 0%, transparent 35%), radial-gradient(circle at 75% 80%, rgba(0,0,0,0.55) 0%, transparent 55%); }
-        .fd-moon-orbit { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; transform: translate(-50%,-50%); animation: fd-planet-spin 9s linear infinite; }
+        .fd-moon-orbit-pos { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; transform: translate(-50%,-50%); }
+        .fd-moon-orbit { position: absolute; inset: 0; animation: fd-planet-spin 9s linear infinite; }
         .fd-moon-small {
           position: absolute; top: 0; left: 50%; transform: translate(-50%,-50%);
           width: clamp(12px,2.4vw,19px); height: clamp(12px,2.4vw,19px); border-radius: 50%;
           background-image: url("./textures/moon.jpg");
           background-size: cover; box-shadow: 0 0 8px 2px rgba(230,236,250,0.45), inset -2px -2px 4px rgba(0,0,0,0.5);
         }
-
-        .fd-mountains { display: none; }
-        .fd-house { display: none; }
-        .fd-lanterns { display: none; }
 
         .fd-meteor { position: absolute; transform: translate(-50%, -50%); pointer-events: none; z-index: 6; }
         .fd-meteor-aim { width: 22px; height: 22px; position: relative; }
@@ -871,7 +919,6 @@ export default function App() {
         .fd-plane--shoot img { filter: drop-shadow(0 3px 3px rgba(0,0,0,0.35)) drop-shadow(0 10px 10px rgba(0,0,0,0.5)) brightness(1.4) saturate(1.25) drop-shadow(0 0 10px rgba(230,187,92,0.85)); }
         .fd-plane-glow { position: absolute; left: 50%; bottom: 6%; width: 45%; height: 22%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(255,190,90,0.9) 0%, rgba(255,120,40,0.55) 45%, rgba(255,80,40,0) 75%); opacity: 0.35; filter: blur(2px); transition: opacity 0.12s ease-out, transform 0.12s ease-out; pointer-events: none; z-index: -2; }
         .fd-plane--shoot .fd-plane-glow { opacity: 1; transform: translateX(-50%) scaleY(1.6); }
-
         .fd-plane-flames { position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); display: flex; gap: clamp(3px, 1vw, 6px); z-index: -1; pointer-events: none; transition: transform 0.1s ease-out; }
         .fd-plane--shoot .fd-plane-flames { transform: translateX(-50%) scaleY(1.5); }
         .fd-flame { position: relative; width: clamp(5px, 1.2vw, 8px); height: clamp(12px, 2.8vw, 18px); border-radius: 50% 50% 60% 60% / 60% 60% 100% 100%; background: linear-gradient(180deg, rgba(255,225,140,0.95) 0%, rgba(255,150,60,0.85) 45%, rgba(255,70,30,0) 100%); filter: blur(0.6px); transform-origin: 50% 0%; animation: fd-flame-flicker-a 0.16s ease-in-out infinite alternate; }
@@ -915,7 +962,6 @@ export default function App() {
 
         @keyframes fd-twinkle { 0%,100% { opacity: 0.1; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.4); } }
         @keyframes fd-aurora-shift { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes fd-nebula-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(4%, -3%) scale(1.08); } }
         @keyframes fd-planet-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes fd-earth-scroll { from { background-position: 0% center; } to { background-position: 100% center; } }
         @keyframes fd-galaxy-drift { from { transform: scale(1.05) translate(0, 0); } to { transform: scale(1.18) translate(-2.5%, -1.5%); } }
@@ -965,8 +1011,10 @@ export default function App() {
             <div className="fd-earth-spin" />
             <div className="fd-earth-shade" />
           </div>
-          <div className="fd-moon-orbit">
-            <span className="fd-moon-small" />
+          <div className="fd-moon-orbit-pos">
+            <div className="fd-moon-orbit">
+              <span className="fd-moon-small" />
+            </div>
           </div>
         </div>
       </div>
@@ -987,11 +1035,16 @@ export default function App() {
 
       {screen === "menu" && (
         <div className="fd-panel">
-          <div className="fd-menu-stats">
+          <button className="fd-help-fab" onClick={() => setShowHelp(true)} aria-label="Cách chơi">?</button>
+          <div className={`fd-menu-stats ${wrongWords.length > 0 ? "fd-menu-stats--3" : ""}`}>
             <div className="fd-stat"><b>{deck.length}</b><span>từ đã lưu</span></div>
             <div className="fd-stat"><b>{bestScore}</b><span>điểm cao nhất</span></div>
+            {wrongWords.length > 0 && (
+              <div className="fd-stat fd-stat--wrong"><b>{wrongWords.length}</b><span>cần luyện lại</span></div>
+            )}
           </div>
 
+          <div className="fd-menu-label">Hiển thị chữ</div>
           <div className="fd-mode-toggle">
             <div className={`fd-mode-opt ${mode === "hz" ? "fd-mode-opt--on" : ""}`} onClick={() => setMode("hz")}>
               汉字 → gõ pinyin
@@ -1001,6 +1054,16 @@ export default function App() {
             </div>
             <div className={`fd-mode-opt ${mode === "vn" ? "fd-mode-opt--on" : ""}`} onClick={() => setMode("vn")}>
               Nghĩa Việt → pinyin
+            </div>
+          </div>
+
+          <div className="fd-menu-label">Chế độ chơi</div>
+          <div className="fd-mode-toggle">
+            <div className={`fd-mode-opt ${!relaxMode ? "fd-mode-opt--on" : ""}`} onClick={() => setRelaxMode(false)}>
+              ⚡ Bình thường · 3 mạng
+            </div>
+            <div className={`fd-mode-opt ${relaxMode ? "fd-mode-opt--on" : ""}`} onClick={() => setRelaxMode(true)}>
+              🍃 Thư giãn · không giới hạn
             </div>
           </div>
 
@@ -1016,16 +1079,30 @@ export default function App() {
             Quản lý kho từ vựng
           </button>
           {deck.length < 4 && <div className="fd-hint">Cần ít nhất 4 từ trong kho để chơi được.</div>}
-          <div className="fd-hint">
-            {mode === "vn" && "Chữ rơi xuống sẽ hiện nghĩa tiếng Việt. Gõ pinyin của từ đó (không dấu) để bắn."}
-            {mode === "both" && "Chữ rơi xuống hiện sẵn cả chữ Hán lẫn pinyin — gõ theo pinyin (không dấu) để bắn, phù hợp lúc mới học."}
-            {mode === "hz" && "Chữ Hán rơi xuống, gõ pinyin (không dấu) của nó để bắn."}
-            {" "}Gõ trúng chữ cái nào khớp với pinyin của một chữ đang rơi thì mũi tên sẽ bay
-            vào đúng chữ đó, không quan trọng chữ nào xuất hiện trước — gõ sai là mất hết,
-            phải gõ lại từ đầu. Để chữ rơi chạm đáy là mất 1 mạng. Mỗi từ trong kho chỉ xuất
-            hiện 1 lần trong một ván — hết từ là hoàn thành ván chơi. Từ nào bị lỡ sẽ tự
-            vào danh sách "từ đã sai"; gõ trúng lại (kể cả lúc luyện tập) sẽ xoá nó khỏi
-            danh sách đó.
+        </div>
+      )}
+
+      {screen === "menu" && showHelp && (
+        <div className="fd-help-overlay" onClick={() => setShowHelp(false)}>
+          <div className="fd-help-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="fd-help-close" onClick={() => setShowHelp(false)} aria-label="Đóng">✕</button>
+            <div className="fd-help-modal-title">Cách chơi</div>
+            <div className="fd-help-content">
+              <div className="fd-help-row">
+                <span>{mode === "vn" ? "🇻🇳" : "🀄"}</span>
+                <span>
+                  {mode === "vn" && "Nghĩa tiếng Việt hiện ra — gõ đúng pinyin (không dấu) để bắn."}
+                  {mode === "both" && "Chữ Hán + pinyin cùng hiện — gõ theo pinyin (không dấu) để bắn."}
+                  {mode === "hz" && "Chữ Hán rơi xuống — gõ pinyin (không dấu) của nó để bắn."}
+                </span>
+              </div>
+              <div className="fd-help-row"><span>🎯</span><span>Gõ trúng chữ cái khớp pinyin của chữ nào, mũi tên sẽ tự bay vào đúng chữ đó — không quan trọng chữ nào rơi trước.</span></div>
+              <div className="fd-help-row"><span>❌</span><span>Gõ sai một chữ cái là mất hết tiến trình, phải gõ lại từ đầu.</span></div>
+              <div className="fd-help-row"><span>💥</span><span>Để chữ rơi chạm đáy là mất 1 mạng (chế độ Bình thường) — chế độ Thư giãn thì không sao cả.</span></div>
+              <div className="fd-help-row"><span>🔁</span><span>Mỗi từ trong kho chỉ xuất hiện 1 lần trong một ván — hết từ là hoàn thành ván chơi.</span></div>
+              <div className="fd-help-row"><span>✅</span><span>Từ bị lỡ tự vào danh sách "từ đã sai"; gõ trúng lại (kể cả lúc luyện tập) sẽ xoá khỏi danh sách đó.</span></div>
+            </div>
+            <button className="fd-btn fd-btn--primary" onClick={() => setShowHelp(false)}>Đã hiểu</button>
           </div>
         </div>
       )}
@@ -1081,7 +1158,11 @@ export default function App() {
             </div>
             <div className="fd-hud-right">
               <div className="fd-lives">
-                {[0, 1, 2].map((i) => <span key={i} className={i < lives ? "" : "fd-life--lost"}>🚀</span>)}
+                {relaxMode ? (
+                  <span>♾️</span>
+                ) : (
+                  [0, 1, 2].map((i) => <span key={i} className={i < lives ? "" : "fd-life--lost"}>🚀</span>)
+                )}
               </div>
               <button className="fd-exit" onClick={() => setVoiceOn((v) => !v)} aria-label="Bật/tắt giọng đọc">
                 {voiceOn ? "🔊" : "🔇"}
