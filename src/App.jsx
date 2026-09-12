@@ -204,15 +204,6 @@ export default function App() {
     []
   );
 
-  const nebulae = useMemo(
-    () => [
-      { left: "-8%", top: "5%", width: "60%", height: "55%", color: "126,74,189", dur: 24, delay: 0 },
-      { right: "-10%", top: "30%", width: "55%", height: "50%", color: "46,167,177", dur: 30, delay: 3 },
-      { left: "20%", bottom: "-10%", width: "50%", height: "40%", color: "198,80,120", dur: 27, delay: 6 },
-    ],
-    []
-  );
-
   const planets = useMemo(
     () => [
       { left: "8%", top: "14%", size: 16, bg: "radial-gradient(circle at 35% 30%, #f0a86e 0%, #a85a3a 70%)", glow: "0 0 14px 3px rgba(240,168,110,0.3)", dur: 52 },
@@ -797,6 +788,14 @@ export default function App() {
         .fd-arena--shake { animation: fd-shake 0.3s ease; }
 
         .fd-star { position: absolute; background: #fff; border-radius: 50%; animation: fd-twinkle 3.2s ease-in-out infinite; }
+        .fd-galaxy-bg {
+          position: absolute; inset: -12%; pointer-events: none;
+          background-image: url("./textures/stars-bg.jpg");
+          background-size: cover; background-position: center;
+          opacity: 0.4; mix-blend-mode: screen;
+          animation: fd-galaxy-drift 90s ease-in-out infinite alternate;
+        }
+        .fd-bg-scene--lite .fd-galaxy-bg { animation-play-state: paused; opacity: 0.3; }
         .fd-nebula { position: absolute; border-radius: 50%; filter: blur(26px); mix-blend-mode: screen; pointer-events: none; animation: fd-nebula-drift ease-in-out infinite alternate; }
         .fd-planet { position: absolute; border-radius: 50%; pointer-events: none; animation: fd-planet-spin linear infinite; }
         .fd-planet-spot { position: absolute; top: 14%; left: 58%; width: 30%; height: 30%; border-radius: 50%; background: rgba(0,0,0,0.28); }
@@ -815,8 +814,22 @@ export default function App() {
           content: ""; position: absolute; right: 0; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%;
           background: #fff; box-shadow: 0 0 10px 3px rgba(255,255,255,0.9), 0 0 22px 7px rgba(190,210,255,0.45);
         }
-        .fd-moon { position: absolute; top: 6%; right: 8%; width: clamp(60px,12vw,110px); height: clamp(60px,12vw,110px); border-radius: 50%; background: radial-gradient(circle at 38% 35%, #fbfcff 0%, #dfe3f2 55%, #c7cce0 100%); box-shadow: 0 0 60px 22px rgba(232,236,250,0.18), 0 0 120px 50px rgba(232,236,250,0.08); }
-        .fd-moon i { position: absolute; border-radius: 50%; background: rgba(150,155,180,0.35); }
+        .fd-earth-wrap { position: absolute; top: 5%; right: 6%; width: clamp(92px,18vw,172px); height: clamp(92px,18vw,172px); pointer-events: none; }
+        .fd-earth { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: clamp(58px,11.5vw,106px); height: clamp(58px,11.5vw,106px); border-radius: 50%; overflow: hidden; box-shadow: 0 0 50px 18px rgba(100,180,255,0.18), 0 0 100px 40px rgba(100,180,255,0.08); }
+        .fd-earth-spin {
+          position: absolute; inset: 0; border-radius: 50%;
+          background-image: url("./textures/earth.jpg");
+          background-size: 200% 100%; background-repeat: repeat-x;
+          animation: fd-earth-scroll 34s linear infinite;
+        }
+        .fd-earth-shade { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; background: radial-gradient(circle at 30% 25%, rgba(255,255,255,0.4) 0%, transparent 35%), radial-gradient(circle at 75% 80%, rgba(0,0,0,0.55) 0%, transparent 55%); }
+        .fd-moon-orbit { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; transform: translate(-50%,-50%); animation: fd-planet-spin 9s linear infinite; }
+        .fd-moon-small {
+          position: absolute; top: 0; left: 50%; transform: translate(-50%,-50%);
+          width: clamp(12px,2.4vw,19px); height: clamp(12px,2.4vw,19px); border-radius: 50%;
+          background-image: url("./textures/moon.jpg");
+          background-size: cover; box-shadow: 0 0 8px 2px rgba(230,236,250,0.45), inset -2px -2px 4px rgba(0,0,0,0.5);
+        }
 
         .fd-mountains { display: none; }
         .fd-house { display: none; }
@@ -826,7 +839,7 @@ export default function App() {
         .fd-meteor-aim { width: 22px; height: 22px; position: relative; }
         .fd-meteor-spin { width: 100%; height: 100%; position: relative; animation: fd-meteor-tumble 0.5s linear infinite; }
         .fd-meteor-flame { position: absolute; left: 50%; top: 46%; width: 10px; height: 22px; background: linear-gradient(0deg, rgba(255,200,90,0.95) 0%, rgba(255,120,50,0.55) 55%, rgba(255,80,40,0) 100%); border-radius: 40% 40% 50% 50%; transform: translateX(-50%); filter: blur(1.5px); }
-        .fd-meteor-rock { position: relative; width: 100%; height: 100%; display: block; }
+        .fd-meteor-rock { position: relative; width: 100%; height: 100%; display: block; border-radius: 45% 55% 60% 40% / 50% 45% 55% 50%; background-image: url("./textures/meteor-rock.png"); background-size: 180% 180%; background-position: 40% 35%; box-shadow: inset -2px -2px 3px rgba(0,0,0,0.6); }
 
         .fd-strike-line { position: absolute; left: 0; right: 0; top: 90%; border-top: 1px dashed rgba(230,187,92,0.2); }
 
@@ -850,11 +863,22 @@ export default function App() {
         .fd-burst--miss .fd-burst-mn { color: var(--lantern); }
         .fd-impact { position: absolute; width: 40px; height: 40px; transform: translate(-50%,-50%); border-radius: 50%; background: radial-gradient(circle, rgba(255,215,130,0.95) 0%, rgba(255,140,60,0.7) 35%, rgba(255,80,40,0) 70%); animation: fd-impact-pop 0.48s ease-out forwards; pointer-events: none; z-index: 7; }
 
-        .fd-plane-pos { position: absolute; left: 50%; bottom: 1.5%; transform: translateX(-50%); z-index: 4; }
-        .fd-plane-bob { animation: fd-plane-idle 2.4s ease-in-out infinite; filter: drop-shadow(0 6px 6px rgba(0,0,0,0.55)); }
-        .fd-plane { width: clamp(28px, 6vw, 38px); height: clamp(32px, 6.9vw, 43px); transform-origin: 50% 58%; transition: transform 0.16s ease-out; }
-        .fd-plane svg { display: block; width: 100%; height: 100%; }
-        .fd-plane--shoot svg { filter: brightness(1.35) saturate(1.2); }
+        .fd-plane-pos { position: absolute; left: 50%; bottom: 1.5%; transform: translateX(-50%); z-index: 4; perspective: 300px; }
+        .fd-plane-shadow { position: absolute; left: 50%; bottom: -6px; width: 30px; height: 9px; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 72%); animation: fd-plane-shadow-pulse 2.4s ease-in-out infinite; z-index: 1; }
+        .fd-plane-bob { animation: fd-plane-idle 2.4s ease-in-out infinite; position: relative; z-index: 2; transform-style: preserve-3d; }
+        .fd-plane { width: clamp(34px, 7.4vw, 46px); height: clamp(38px, 8.4vw, 52px); transform-origin: 50% 58%; transition: transform 0.16s ease-out; position: relative; transform-style: preserve-3d; }
+        .fd-plane img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 3px 3px rgba(0,0,0,0.35)) drop-shadow(0 10px 10px rgba(0,0,0,0.5)); transform: rotateX(10deg); transition: filter 0.16s ease-out; }
+        .fd-plane--shoot img { filter: drop-shadow(0 3px 3px rgba(0,0,0,0.35)) drop-shadow(0 10px 10px rgba(0,0,0,0.5)) brightness(1.4) saturate(1.25) drop-shadow(0 0 10px rgba(230,187,92,0.85)); }
+        .fd-plane-glow { position: absolute; left: 50%; bottom: 6%; width: 45%; height: 22%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(ellipse, rgba(255,190,90,0.9) 0%, rgba(255,120,40,0.55) 45%, rgba(255,80,40,0) 75%); opacity: 0.35; filter: blur(2px); transition: opacity 0.12s ease-out, transform 0.12s ease-out; pointer-events: none; z-index: -2; }
+        .fd-plane--shoot .fd-plane-glow { opacity: 1; transform: translateX(-50%) scaleY(1.6); }
+
+        .fd-plane-flames { position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); display: flex; gap: clamp(3px, 1vw, 6px); z-index: -1; pointer-events: none; transition: transform 0.1s ease-out; }
+        .fd-plane--shoot .fd-plane-flames { transform: translateX(-50%) scaleY(1.5); }
+        .fd-flame { position: relative; width: clamp(5px, 1.2vw, 8px); height: clamp(12px, 2.8vw, 18px); border-radius: 50% 50% 60% 60% / 60% 60% 100% 100%; background: linear-gradient(180deg, rgba(255,225,140,0.95) 0%, rgba(255,150,60,0.85) 45%, rgba(255,70,30,0) 100%); filter: blur(0.6px); transform-origin: 50% 0%; animation: fd-flame-flicker-a 0.16s ease-in-out infinite alternate; }
+        .fd-flame-r { animation-name: fd-flame-flicker-b; animation-duration: 0.13s; }
+        .fd-plane--shoot .fd-flame { animation-duration: 0.08s; }
+        .fd-plane--shoot .fd-flame-r { animation-duration: 0.065s; }
+        .fd-flame-inner { position: absolute; left: 50%; top: 12%; width: 50%; height: 55%; transform: translateX(-50%); border-radius: 50%; background: radial-gradient(circle, #fff7d6 0%, #ffd873 60%, rgba(255,180,80,0) 100%); }
 
         .fd-type-bar { position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
         .fd-pinyin-input { width: 1px; height: 1px; border: none; background: transparent; color: transparent; padding: 0; outline: none; }
@@ -893,6 +917,8 @@ export default function App() {
         @keyframes fd-aurora-shift { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         @keyframes fd-nebula-drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(4%, -3%) scale(1.08); } }
         @keyframes fd-planet-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes fd-earth-scroll { from { background-position: 0% center; } to { background-position: 100% center; } }
+        @keyframes fd-galaxy-drift { from { transform: scale(1.05) translate(0, 0); } to { transform: scale(1.18) translate(-2.5%, -1.5%); } }
         @keyframes fd-shoot {
           0%, 95.5% { opacity: 0; transform: translate(0, 0); }
           96% { opacity: 1; }
@@ -900,6 +926,9 @@ export default function App() {
           100% { opacity: 0; }
         }
         @keyframes fd-plane-idle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        @keyframes fd-plane-shadow-pulse { 0%,100% { transform: translateX(-50%) scale(1); opacity: 0.55; } 50% { transform: translateX(-50%) scale(0.82); opacity: 0.4; } }
+        @keyframes fd-flame-flicker-a { 0% { transform: scaleY(0.8) scaleX(0.9); opacity: 0.8; } 100% { transform: scaleY(1.2) scaleX(1.05); opacity: 1; } }
+        @keyframes fd-flame-flicker-b { 0% { transform: scaleY(0.9) scaleX(0.85); opacity: 0.85; } 100% { transform: scaleY(1.3) scaleX(1.1); opacity: 1; } }
         @keyframes fd-meteor-tumble { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes fd-impact-pop { 0% { transform: translate(-50%,-50%) scale(0.3); opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1.8); opacity: 0; } }
         @keyframes fd-shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-7px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
@@ -909,14 +938,8 @@ export default function App() {
       `}</style>
 
       <div className={`fd-bg-scene ${isMobile && screen === "playing" ? "fd-bg-scene--lite" : ""}`}>
+        <div className="fd-galaxy-bg" />
         <div className="fd-aurora" />
-        {nebulae.map((n, i) => (
-          <div key={i} className="fd-nebula" style={{
-            left: n.left, right: n.right, top: n.top, bottom: n.bottom, width: n.width, height: n.height,
-            background: `radial-gradient(circle, rgba(${n.color},0.5) 0%, rgba(${n.color},0) 70%)`,
-            animationDuration: `${n.dur}s`, animationDelay: `${n.delay}s`,
-          }} />
-        ))}
         {planets.map((p, i) => (
           <div key={i} className="fd-planet" style={{
             left: p.left, top: p.top, width: p.size, height: p.size,
@@ -937,7 +960,15 @@ export default function App() {
             <div className="fd-shooting-star-inner" style={{ transform: `rotate(${sh.angleDeg}deg)` }} />
           </div>
         ))}
-        <div className="fd-moon"><i style={{ width: 10, height: 10, top: 18, left: 22 }} /><i style={{ width: 6, height: 6, top: 34, left: 40 }} /></div>
+        <div className="fd-earth-wrap">
+          <div className="fd-earth">
+            <div className="fd-earth-spin" />
+            <div className="fd-earth-shade" />
+          </div>
+          <div className="fd-moon-orbit">
+            <span className="fd-moon-small" />
+          </div>
+        </div>
       </div>
 
       {screen === "loading" && <div className="fd-loading">Đang tải từ vựng...</div>}
@@ -1102,12 +1133,7 @@ export default function App() {
                 <div className="fd-meteor-aim" style={{ transform: `rotate(${m.angle}deg)` }}>
                   <div className="fd-meteor-flame" />
                   <div className="fd-meteor-spin" style={{ animationDirection: m.spin < 0 ? "reverse" : "normal" }}>
-                    <svg className="fd-meteor-rock" viewBox="0 0 24 24">
-                      <polygon points="12,2 18,7 20,14 15,21 8,20 4,13 6,6" fill="#8a7a6a" stroke="#4a3f38" strokeWidth="1" strokeLinejoin="round" />
-                      <circle cx="10" cy="10" r="1.6" fill="#5c5049" />
-                      <circle cx="15" cy="14" r="1.1" fill="#5c5049" />
-                      <circle cx="11" cy="16" r="0.9" fill="#6b5f56" />
-                    </svg>
+                    <div className="fd-meteor-rock" />
                   </div>
                 </div>
               </div>
@@ -1118,25 +1144,15 @@ export default function App() {
             ))}
 
             <div className="fd-plane-pos">
+              <div className="fd-plane-shadow" />
               <div className="fd-plane-bob">
                 <div className={`fd-plane ${planeShoot ? "fd-plane--shoot" : ""}`} style={{ transform: `rotate(${planeAngle}deg)` }}>
-                  <svg viewBox="0 0 40 46" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                      <linearGradient id="fdJetBody" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#dfe6f3" />
-                        <stop offset="55%" stopColor="#a9b6d6" />
-                        <stop offset="100%" stopColor="#727fa8" />
-                      </linearGradient>
-                    </defs>
-                    <path d="M20 0 L23.5 13 L23.5 29 L20 44 L16.5 29 L16.5 13 Z" fill="url(#fdJetBody)" stroke="#3a3f5c" strokeWidth="0.7" strokeLinejoin="round" />
-                    <path d="M16.5 19 L2 29 L7.5 31.5 L16.5 25 Z" fill="#8d99bd" stroke="#3a3f5c" strokeWidth="0.5" strokeLinejoin="round" />
-                    <path d="M23.5 19 L38 29 L32.5 31.5 L23.5 25 Z" fill="#8d99bd" stroke="#3a3f5c" strokeWidth="0.5" strokeLinejoin="round" />
-                    <path d="M17.5 27 L11 39 L16 36.5 L18.5 30 Z" fill="#6c76a0" />
-                    <path d="M22.5 27 L29 39 L24 36.5 L21.5 30 Z" fill="#6c76a0" />
-                    <path d="M19 23 L19 40 L20 37 L21 40 L21 23 Z" fill="#565f86" />
-                    <ellipse cx="20" cy="9.5" rx="2.3" ry="3.8" fill="#7fd9c4" opacity="0.9" />
-                    <path d="M18 41 L20 46 L22 41 Z" fill="#e6bb5c" opacity={planeShoot ? 1 : 0.75} />
-                  </svg>
+                  <div className="fd-plane-glow" />
+                  <div className="fd-plane-flames">
+                    <span className="fd-flame fd-flame-l"><span className="fd-flame-inner" /></span>
+                    <span className="fd-flame fd-flame-r"><span className="fd-flame-inner" /></span>
+                  </div>
+                  <img src="./textures/plane.png" alt="" draggable="false" />
                 </div>
               </div>
             </div>
